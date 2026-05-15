@@ -20,6 +20,7 @@ body {
   min-height: 100vh;
   font-family: Arial, sans-serif;
   color: var(--text);
+  position: relative;
   background:
     radial-gradient(900px 700px at 10% 10%, rgba(255, 255, 255, 0.22), transparent 60%),
     radial-gradient(800px 700px at 90% 30%, rgba(255, 255, 255, 0.14), transparent 55%),
@@ -47,7 +48,8 @@ body::before {
   right: -150px;
   filter: blur(120px);
   opacity: 0.9;
-  animation: floatBlob1 10s ease-in-out infinite;
+  will-change: transform;
+  transform: translateZ(0);
 }
 
 body::after {
@@ -62,7 +64,20 @@ body::after {
   left: -120px;
   filter: blur(120px);
   opacity: 0.85;
-  animation: floatBlob2 12s ease-in-out infinite;
+  will-change: transform;
+  transform: translateZ(0);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    body::before {
+      animation: floatBlob1 10s ease-in-out infinite;
+    }
+
+    body::after {
+      animation: floatBlob2 12s ease-in-out infinite;
+    }
+  }
 }
 
 @keyframes floatBlob1 {
@@ -111,11 +126,16 @@ body::after {
   padding: 35px;
   border-radius: 30px;
   background: linear-gradient(135deg, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0.09));
-  backdrop-filter: blur(20px) saturate(140%);
-  -webkit-backdrop-filter: blur(20px) saturate(140%);
   box-shadow: var(--shadow);
   border: 1px solid var(--glass-border);
   text-align: center;
+}
+
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .weather-card {
+    backdrop-filter: blur(20px) saturate(140%);
+    -webkit-backdrop-filter: blur(20px) saturate(140%);
+  }
 }
 
 .weather-card::before {
@@ -129,7 +149,6 @@ body::after {
     radial-gradient(110% 90% at 90% 25%, rgba(255, 255, 255, 0.20), transparent 60%),
     linear-gradient(180deg, rgba(255, 255, 255, 0.12), transparent 55%, rgba(0, 0, 0, 0.10));
   opacity: 0.75;
-  mix-blend-mode: overlay;
 }
 
 .weather-card::after {
@@ -144,6 +163,25 @@ body::after {
     radial-gradient(260px 220px at 55% 95%, rgba(255, 255, 255, 0.14), transparent 62%);
   filter: blur(18px);
   opacity: 0.70;
+  will-change: transform;
+  transform: translateZ(0);
+}
+
+@keyframes liquidShift {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+
+  50% {
+    transform: translate3d(18px, -12px, 0) scale(1.03);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .weather-card::after {
+    animation: liquidShift 8s ease-in-out infinite;
+  }
 }
 
 .weather-card > * {
