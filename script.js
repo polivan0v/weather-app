@@ -1,5 +1,6 @@
 const form = document.getElementById("searchForm");
 const cityInput = document.getElementById("cityInput");
+const cityHistoryEl = document.getElementById("cityHistory");
 
 const cityName = document.getElementById("cityName");
 const temperature = document.getElementById("temperature");
@@ -7,6 +8,9 @@ const description = document.getElementById("description");
 const humidity = document.getElementById("humidity");
 const wind = document.getElementById("wind");
 const errorMessage = document.getElementById("errorMessage");
+
+const CITY_HISTORY_KEY = "cityHistory";
+const MAX_CITY_HISTORY = 5;
 
 const weatherCodes = {
   0: "Ясно",
@@ -72,6 +76,75 @@ function renderWeatherIcon(code) {
   el.textContent = icon;
 }
 
+function loadCityHistory() {
+  try {
+    const raw = localStorage.getItem(CITY_HISTORY_KEY);
+    if (!raw) return [];
+
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+
+    return parsed
+      .filter((x) => x && typeof x.name === "string")
+      .map((x) => ({
+        name: x.name.trim(),
+        country: typeof x.country === "string" ? x.country.trim() : "",
+      }))
+      .filter((x) => x.name.length > 0)
+      .slice(0, MAX_CITY_HISTORY);
+  } catch {
+    return [];
+  }
+}
+
+function saveCityHistory(items) {
+  try {
+    localStorage.setItem(CITY_HISTORY_KEY, JSON.stringify(items));
+  } catch {
+    // ignore quota / privacy mode
+  }
+}
+
+function addCityToHistory(location) {
+  const name = (location && location.name ? String(location.name) : "").trim();
+  const country = (location && location.country ? String(location.country) : "").trim();
+  if (!name) return;
+
+  const key = `${name.toLowerCase()}|${country.toLowerCase()}`;
+  const existing = loadCityHistory();
+  const next = [{ name, country }].concat(
+    existing.filter((x) => `${x.name.toLowerCase()}|${x.country.toLowerCase()}` !== key)
+  );
+
+  saveCityHistory(next.slice(0, MAX_CITY_HISTORY));
+  renderCityHistory();
+}
+
+function renderCityHistory() {
+  if (!cityHistoryEl) return;
+
+  const items = loadCityHistory();
+  cityHistoryEl.innerHTML = "";
+
+  if (items.length === 0) {
+    cityHistoryEl.hidden = true;
+    return;
+  }
+
+  cityHistoryEl.hidden = false;
+  for (const item of items) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.textContent = item.name;
+    btn.title = item.country ? `${item.name}, ${item.country}` : item.name;
+    btn.addEventListener("click", () => {
+      cityInput.value = item.name;
+      getWeather(item.name);
+    });
+    cityHistoryEl.appendChild(btn);
+  }
+}
+
 async function getCoordinates(city) {
   const url =
     `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}` +
@@ -88,37 +161,44 @@ async function getCoordinates(city) {
   return data.results[0];
 }
 
+async function getWeatherByLocation(location, persistCityName = true) {
+  const weatherUrl =
+    `https://api.open-meteo.com/v1/forecast?latitude=${location.latitude}` +
+    `&longitude=${location.longitude}` +
+    `&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m` +
+    `&wind_speed_unit=ms&timezone=auto`;
+
+  const response = await fetch(weatherUrl);
+  if (!response.ok) throw new Error("Помилка отримання погоди");
+
+  const data = await response.json();
+  const current = data.current;
+  if (!current) throw new Error("Немає даних про поточну погоду");
+
+  const code = current.weather_code;
+
+  const label = location.country ? `${location.name}, ${location.country}` : location.name;
+  cityName.textContent = label;
+  temperature.textContent = `${Math.round(current.temperature_2m)}°C`;
+  description.textContent = weatherCodes[code] || "Погода";
+  humidity.textContent = `${current.relative_humidity_2m}%`;
+  wind.textContent = `${current.wind_speed_10m} м/с`;
+
+  renderWeatherIcon(code);
+  applyWeatherTheme(code);
+
+  if (persistCityName) {
+    localStorage.setItem("lastCity", location.name);
+    addCityToHistory(location);
+  }
+}
+
 async function getWeather(city) {
   try {
     errorMessage.textContent = "";
 
     const location = await getCoordinates(city);
-
-    const weatherUrl =
-      `https://api.open-meteo.com/v1/forecast?latitude=${location.latitude}` +
-      `&longitude=${location.longitude}` +
-      `&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m` +
-      `&wind_speed_unit=ms&timezone=auto`;
-
-    const response = await fetch(weatherUrl);
-    if (!response.ok) throw new Error("Помилка отримання погоди");
-
-    const data = await response.json();
-    const current = data.current;
-    if (!current) throw new Error("Немає даних про поточну погоду");
-
-    const code = current.weather_code;
-
-    cityName.textContent = `${location.name}, ${location.country}`;
-    temperature.textContent = `${Math.round(current.temperature_2m)}°C`;
-    description.textContent = weatherCodes[code] || "Погода";
-    humidity.textContent = `${current.relative_humidity_2m}%`;
-    wind.textContent = `${current.wind_speed_10m} м/с`;
-
-    renderWeatherIcon(code);
-    applyWeatherTheme(code);
-
-    localStorage.setItem("lastCity", city);
+    await getWeatherByLocation(location, true);
   } catch (error) {
     errorMessage.textContent = error.message || "Невідома помилка";
   }
@@ -138,4 +218,5 @@ form.addEventListener("submit", (event) => {
 });
 
 const lastCity = localStorage.getItem("lastCity");
+renderCityHistory();
 getWeather(lastCity || "Kyiv");
